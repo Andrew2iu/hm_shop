@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:hm_shop/constants/index.dart';
+import 'package:hm_shop/stores/TokenManager.dart';
 
 class DioRequest {
   final _dio = Dio();
@@ -15,6 +16,11 @@ class DioRequest {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (request, handler) {
+          if (tokenManager.getToken().isNotEmpty) {
+            request.headers = {
+              "Authorization": "Bearer ${tokenManager.getToken()}",
+            };
+          }
           return handler.next(request);
         },
         onResponse: (response, handler) {
@@ -26,7 +32,12 @@ class DioRequest {
           );
         },
         onError: (error, handler) {
-          return handler.reject(error);
+          return handler.reject(
+            DioException(
+              requestOptions: error.requestOptions,
+              message: error.response?.data["msg"] ?? "",
+            ),
+          );
         },
       ),
     );
@@ -41,6 +52,10 @@ class DioRequest {
     );
   }
 
+  Future<dynamic> post(String url, {Map<String, dynamic>? data}) async {
+    return await _handleResponse(_dio.post(url, data: data));
+  }
+
   // 进一步处理返回结果的函数 结构data 检查业务状态码
   Future<dynamic> _handleResponse(Future<Response<dynamic>> task) async {
     try {
@@ -50,9 +65,12 @@ class DioRequest {
         return data["result"];
       }
       // 处理错误状态码
-      throw Exception(data["msg"] ?? "请求失败");
+      throw DioException(
+        requestOptions: res.requestOptions,
+        message: data["msg"] ?? "请求失败",
+      );
     } catch (e) {
-      throw Exception(e);
+      rethrow;
     }
   }
 }
